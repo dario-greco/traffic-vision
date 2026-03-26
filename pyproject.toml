@@ -1,0 +1,23 @@
+[project]
+name = "stat946-cs3"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=4.8.3",
+    "fiftyone>=1.13.4",
+    "huggingface-hub>=1.7.2",
+    "ipykernel>=7.2.0",
+    "ipywidgets>=8.1.8",
+    "matplotlib>=3.10.8",
+    "mne>=1.11.0",
+    "nilearn>=0.13.1",
+    "openneuro-py>=2026.3.0",
+    "pandas>=3.0.1",
+    "pybids>=0.22.0",
+    "scikit-learn>=1.8.0",
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "ultralytics>=8.4.26",
+]

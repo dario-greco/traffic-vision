@@ -1,0 +1,19 @@
+# --- Python & Environment ---
+__pycache__/
+.venv/
+.python-version
+.DS_Store
+
+# --- Project Data (DO NOT UPLOAD) ---
+# We want teammates to run the scripts to generate these locally
+yolo_dataset/
+runs/
+logs/
+
+# --- Model Weights ---
+# These are large binary files that belong on the cluster, not GitHub
+*.pt
+
+# --- Hidden Metadata ---
+.fiftyone/
+.uv/
