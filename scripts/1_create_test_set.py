@@ -111,7 +111,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 # dry run: 
-# python3 split_test.py --data-dir "../yolo_dataset" --n 100 --seed 946 --dry-run
+# python3 scripts/1_create_test_set.py --data-dir "yolo_dataset" --n 100 --seed 946 --dry-run
 
 # actually move the files:
-# python3 split_test.py --data-dir "../yolo_dataset" --n 100 --seed 946
+# python3 scripts/1_create_test_set.py --data-dir "yolo_dataset" --n 100 --seed 946
