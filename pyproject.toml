@@ -13,6 +13,7 @@ dependencies = [
     "matplotlib>=3.10.8",
     "mne>=1.11.0",
     "nilearn>=0.13.1",
+    "opencv-python>=4.13.0.92",
     "openneuro-py>=2026.3.0",
     "pandas>=3.0.1",
     "pybids>=0.22.0",
