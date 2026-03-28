@@ -1,0 +1,94 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# D-FINE-M  ·  Traffic Detection  (stop sign + traffic light)
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# This config inherits the full D-FINE-M architecture from the official
+# custom-dataset template and overrides only dataset-specific settings.
+#
+# Prerequisites
+# -------------
+#   1.  Clone the D-FINE repo into the D-FINE/ folder:
+#           git clone https://github.com/Peterande/D-FINE.git . --depth=1
+#           pip install -r requirements.txt
+#
+#   2.  Prepare the COCO-format dataset:
+#           python prepare_dfine_dataset.py
+#
+#   3.  Download pre-trained weights:
+#           python download_dfine_weights.py --model m --pretrain obj2coco
+#
+# Training (from D-FINE/):
+#   python train_dfine.py          # wraps the command below
+#   # OR directly:
+#   torchrun --nproc_per_node=1 train.py \
+#       -c custom/configs/dfine_m_traffic.yml \
+#       --use-amp --seed=0 \
+#       -t custom/weights/dfine_m_obj2coco.pth
+#
+# All paths below are relative to the D-FINE/ directory (where train.py lives).
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Inherit the official D-FINE-M custom-dataset config (architecture + defaults)
+__include__: ['../../configs/dfine/custom/dfine_hgnetv2_m_custom.yml']
+
+
+# ── Dataset ───────────────────────────────────────────────────────────────────
+
+# Number of object categories in your custom dataset.
+# Must match the number of entries in the COCO categories list.
+num_classes: 2
+
+# Do NOT remap category IDs to MSCOCO's 80-class scheme.
+# Our IDs are 0-indexed integers starting at 0.
+remap_mscoco_category: False
+
+
+# ── Training dataloader ───────────────────────────────────────────────────────
+
+train_dataloader:
+  dataset:
+    # Absolute or relative-to-cwd path to the training images folder.
+    img_folder: custom/dataset/images/train/
+    # COCO JSON with annotations for the training split.
+    ann_file: custom/dataset/annotations/instances_train.json
+
+
+# ── Validation dataloader ─────────────────────────────────────────────────────
+
+val_dataloader:
+  dataset:
+    img_folder: custom/dataset/images/val/
+    ann_file: custom/dataset/annotations/instances_val.json
+
+
+# ── Training schedule ─────────────────────────────────────────────────────────
+# Fine-tuning typically needs far fewer epochs than training from scratch.
+# 72 epochs is a good baseline for a small dataset (~400 images).
+# Increase to 100–150 if you have more data or want higher AP.
+epoches: 72
+
+# ── Early stopping ─────────────────────────────────────────────────────────
+# Stop training when val AP@0.50:0.95 has not improved for this many epochs.
+# Set to 0 to disable.
+early_stopping_patience: 20
+
+# Output directory for checkpoints and logs
+output_dir: output/dfine_m_traffic
+
+
+# ── Optional: tweak these if you have more compute ───────────────────────────
+# Uncomment and adjust as needed.
+
+# optimizer:
+#   lr: 0.0001          # lower LR when fine-tuning from a strong pretrained model
+
+# train_dataloader:
+#   total_batch_size: 16   # default is 32; halve if you run out of VRAM
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+# • The D-FINE class head is automatically re-initialised when num_classes
+#   differs from the checkpoint's head size (handled by D-FINE's solver).
+# • The backbone and transformer encoder/decoder weights are loaded as-is,
+#   giving a strong feature-extraction prior.
+# • obj2coco weights are pre-trained on Objects365 then fine-tuned on COCO 80,
+#   which gives excellent generalisation for traffic-scene categories.
