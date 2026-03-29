@@ -10,6 +10,6 @@
 echo "Job started on $(hostname)"
 
 # Run the script using uv (unbuffered output so you can watch the logs live)
-uv run python -u scripts/2_train_model.py
+uv run python -u scripts/4_train_rcnn.py
 
 echo "Job finished"
