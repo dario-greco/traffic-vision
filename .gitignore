@@ -7,8 +7,12 @@ __pycache__/
 # --- Project Data (DO NOT UPLOAD) ---
 # We want teammates to run the scripts to generate these locally
 yolo_dataset/
+yolo_dataset_blurred/
+blur_samples/
 runs/
 logs/
+experts/
+archieve/
 
 # --- Model Weights ---
 # These are large binary files that belong on the cluster, not GitHub
