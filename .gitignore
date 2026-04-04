@@ -12,8 +12,10 @@ blur_samples/
 runs/
 logs/
 experts/
-archieve/
-
+legacy_archive/
+data_final/
+submit_yolo.sh
+bdd10k.yaml
 # --- Model Weights ---
 # These are large binary files that belong on the cluster, not GitHub
 *.pt
