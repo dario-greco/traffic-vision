@@ -14,7 +14,7 @@ echo "Node: $(hostname)"
 echo "========================================"
 
 # Execute the training script via uv
-uv run python run_yolo_bddk.py
+uv run python scripts/run_yolo_bddk.py
 
 echo "========================================"
 echo "Job finished at $(date)"

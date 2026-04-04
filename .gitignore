@@ -13,9 +13,10 @@ runs/
 logs/
 experts/
 legacy_archive/
-data_final/
+# Ignore all contents of data_final
+data_final/**/*
+!data_final/README.md
 submit_yolo.sh
-bdd10k.yaml
 # --- Model Weights ---
 # These are large binary files that belong on the cluster, not GitHub
 *.pt

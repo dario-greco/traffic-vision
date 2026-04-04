@@ -1,0 +1,8 @@
+path: data_final
+train: images/train
+val: images/val
+test: images/test 
+
+names:
+  0: traffic light
+  1: traffic sign
