@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "albumentations>=2.0.8",
     "datasets>=4.8.3",
     "fiftyone>=1.13.4",
     "huggingface-hub>=1.7.2",
