@@ -8,7 +8,10 @@ This is a thin wrapper around the official D-FINE ``train.py``.  It:
 4. Builds and executes the ``torchrun`` training command.
 
 By default this script also:
-- Passes ``epochs=60`` to the trainer (override with ``--override epochs=N``).
+- Passes ``epochs=5`` to the trainer (override with ``--override epochs=N``).
+- Passes ``checkpoint_freq=6`` (extra checkpoint every 6 epochs).
+- Forces ``output_dir`` to ``output/dfine_m_traffic`` (relative to the D-FINE root)
+  unless you override it.
 - If ``output_dir/best_stg2.pth`` or ``output_dir/best_stg1.pth`` exists and you
   did not pass ``--resume``, it resumes from that checkpoint (full solver state).
   Use ``--from-scratch`` to always start from ``--weights`` (-t) instead.
@@ -46,15 +49,17 @@ import yaml
 from utils import assert_dfine_cloned, dfine_root
 
 
-# Default total epochs forwarded to train.py unless ``--override epochs=...``.
-DEFAULT_TRAIN_EPOCHS = 60
+# Default values forwarded to train.py unless explicitly overridden.
+DEFAULT_TRAIN_EPOCHS = 5
+DEFAULT_CHECKPOINT_FREQ = 6
+DEFAULT_OUTPUT_DIR = Path("output/dfine_m_traffic")
 
 
 def _output_dir_from_config(config_path: Path, root: Path) -> Path:
     """Resolve ``output_dir`` from the top-level YAML (same key as in traffic config)."""
     with open(config_path, encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
-    rel = data.get("output_dir", "output/dfine_m_traffic")
+    rel = data.get("output_dir", str(DEFAULT_OUTPUT_DIR))
     p = Path(rel)
     return p.resolve() if p.is_absolute() else (root / p).resolve()
 
@@ -293,6 +298,12 @@ def main() -> None:
         weights = args.weights.resolve()
 
     overrides = list(args.override or [])
+
+    # Enforce defaults unless explicitly overridden.
+    if not any(o.split("=", 1)[0] == "output_dir" for o in overrides):
+        overrides.insert(0, f"output_dir={DEFAULT_OUTPUT_DIR.as_posix()}")
+    if not any(o.split("=", 1)[0] == "checkpoint_freq" for o in overrides):
+        overrides.insert(0, f"checkpoint_freq={DEFAULT_CHECKPOINT_FREQ}")
     if not any(o.split("=", 1)[0] == "epochs" for o in overrides):
         overrides.insert(0, f"epochs={DEFAULT_TRAIN_EPOCHS}")
 

@@ -43,8 +43,8 @@ val_dataloader:
 # ── Training schedule ─────────────────────────────────────────────────────────
 # D-FINE reads the key ``epochs`` (see BaseConfig). A typo ``epoches`` is ignored,
 # so the base template's ``epochs: 132`` would otherwise win.
-# train_dfine.py also passes epochs=60 by default unless you use --override epochs=N.
-epochs: 60
+# train_dfine.py passes epochs=5 by default unless you use --override epochs=N.
+epochs: 5
 
 # ── Early stopping ─────────────────────────────────────────────────────────
 # Stop training when val AP@0.50:0.95 has not improved for this many epochs.
@@ -53,6 +53,9 @@ early_stopping_patience: 20
 
 # Output directory for checkpoints and logs
 output_dir: output/dfine_m_traffic
+
+# Save an extra checkpoint every N epochs (last/best are always maintained).
+checkpoint_freq: 6
 
 
 # ── Optional: tweak these if you have more compute ───────────────────────────
