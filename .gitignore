@@ -13,6 +13,10 @@ logs/
 data_final/
 *.jpg
 *.png
+configs/
+legacy_archive/
+yolo/labels_backup/
+
 
 # Ignore test outputs
 augmentation_test.png

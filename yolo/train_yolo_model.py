@@ -9,7 +9,7 @@ model = YOLO('yolov8n.pt')
 
 # 2. Get the absolute path to the dataset.yaml file FiftyOne just created
 # YOLO requires the absolute path to avoid directory confusion
-yaml_path = os.path.join(BASE_DIR, "yolo_dataset", "dataset.yaml")
+yaml_path = os.path.join(BASE_DIR, "configs", "bdd10k_augment.yaml")
 
 # 3. Start training
 print("Starting YOLO training...")
