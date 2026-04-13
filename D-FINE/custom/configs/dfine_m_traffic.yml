@@ -1,34 +1,13 @@
-# ──────────────────────────────────────────────────────────────────────────────
-# D-FINE-M  ·  Traffic Detection  (stop sign + traffic light)
-# ──────────────────────────────────────────────────────────────────────────────
+# D-FINE-M · traffic dataset (inherits HGNetv2-M custom template).
 #
-# This config inherits the full D-FINE-M architecture from the official
-# custom-dataset template and overrides only dataset-specific settings.
+# From this directory: pip install -r requirements.txt
+#   python prepare_dfine_dataset.py
+#   python download_dfine_weights.py --model m --pretrain obj2coco
+#   python train_dfine.py
+# Or: torchrun --nproc_per_node=1 train.py -c custom/configs/dfine_m_traffic.yml --use-amp --seed=0 -t custom/weights/dfine_m_obj2coco.pth
 #
-# Prerequisites
-# -------------
-#   1.  Clone the D-FINE repo into the D-FINE/ folder:
-#           git clone https://github.com/Peterande/D-FINE.git . --depth=1
-#           pip install -r requirements.txt
-#
-#   2.  Prepare the COCO-format dataset:
-#           python prepare_dfine_dataset.py
-#
-#   3.  Download pre-trained weights:
-#           python download_dfine_weights.py --model m --pretrain obj2coco
-#
-# Training (from D-FINE/):
-#   python train_dfine.py          # wraps the command below
-#   # OR directly:
-#   torchrun --nproc_per_node=1 train.py \
-#       -c custom/configs/dfine_m_traffic.yml \
-#       --use-amp --seed=0 \
-#       -t custom/weights/dfine_m_obj2coco.pth
-#
-# All paths below are relative to the D-FINE/ directory (where train.py lives).
-# ──────────────────────────────────────────────────────────────────────────────
+# Paths are relative to the D-FINE root (where train.py lives).
 
-# Inherit the official D-FINE-M custom-dataset config (architecture + defaults)
 __include__: ['../../configs/dfine/custom/dfine_hgnetv2_m_custom.yml']
 
 

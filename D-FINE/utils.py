@@ -108,7 +108,7 @@ def image_size(image_path: Path) -> tuple[int, int]:
 # ── D-FINE repo validation ────────────────────────────────────────────────────
 
 def assert_dfine_cloned(root: Path | None = None) -> None:
-    """Raise a descriptive error if the official D-FINE repo is not cloned.
+    """Raise if this training tree is incomplete (core files missing).
 
     Args:
         root: D-FINE root directory. Defaults to :func:`dfine_root`.
@@ -122,12 +122,10 @@ def assert_dfine_cloned(root: Path | None = None) -> None:
 
     if missing:
         raise RuntimeError(
-            "The official D-FINE repository does not appear to be cloned.\n"
-            f"Missing paths: {[str(p.relative_to(root)) for p in missing]}\n\n"
-            "Clone it with:\n"
-            "  cd D-FINE/\n"
-            "  git clone https://github.com/Peterande/D-FINE.git . --depth=1\n"
-            "  pip install -r requirements.txt\n"
+            "D-FINE training files are incomplete or this is not the D-FINE root.\n"
+            f"Missing: {[str(p.relative_to(root)) for p in missing]}\n\n"
+            "Expected ``train.py``, ``src/``, and ``configs/`` next to these scripts.\n"
+            "Install deps with: pip install -r requirements.txt\n"
         )
 
 

@@ -4,8 +4,6 @@
 #
 # Run from the D-FINE/ directory:
 #   bash run_train.sh
-#
-# Or submit to a Slurm cluster (see submit_dfine.sh for a ready-made template).
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -29,12 +27,9 @@ echo "GPUs     : $NPROC"
 echo "Date     : $(date)"
 echo ""
 
-# ── Step 0: Verify D-FINE repo is present ────────────────────────────────────
+# ── Step 0: Verify training tree ────────────────────────────────────────────
 if [[ ! -f "train.py" ]]; then
-    echo "ERROR: train.py not found. Clone the D-FINE repo first:"
-    echo "  cd D-FINE/"
-    echo "  git clone https://github.com/Peterande/D-FINE.git . --depth=1"
-    echo "  pip install -r requirements.txt"
+    echo "ERROR: train.py not found (run this script from the D-FINE/ root)."
     exit 1
 fi
 
