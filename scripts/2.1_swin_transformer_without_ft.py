@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""
-2.1_swin_transformer_without_ft.py
-==================================
-Swin-T **frozen** ImageNet backbone + trainable FPN + RetinaNet for
-stop-sign / traffic-light detection.  All Swin `features` blocks are
-frozen; only ``backbone.fpn`` and the detection head are updated.
+"""Train with a **frozen** Swin-T trunk and only FPN + RetinaNet weights updated.
 
-Same optimisations as 2.1_swin_transformer.py (AMP, accum, train-eval stride, etc.).
+Dataset layout matches ``2.1_swin_transformer.py`` (YOLO boxes under ``dataset/``).
+Swin ``features`` stay fixed at ImageNet pretraining; ``head_lr`` applies to the
+FPN and detection head only.
 
-Usage:
+Same runtime optimisations as the fine-tuning script (AMP, accumulation, periodic
+train mAP, etc.). Outputs default to ``swin_runs_without_ft/``.
+
+CLI examples::
+
     python scripts/2.1_swin_transformer_without_ft.py
     python scripts/2.1_swin_transformer_without_ft.py --epochs 25 --head-lr 3e-4
 """
@@ -43,9 +44,6 @@ from torchvision.models.detection.anchor_utils import AnchorGenerator
 from torchvision.ops import FeaturePyramidNetwork, box_iou
 from torchvision.ops.feature_pyramid_network import LastLevelMaxPool
 
-# ============================================================
-# Defaults
-# ============================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DATA_DIR = BASE_DIR / "dataset"
 DEFAULT_OUTPUT_DIR = BASE_DIR / "swin_runs_without_ft"
@@ -58,7 +56,7 @@ IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG")
 
 @dataclass
 class TrainConfig:
-    """Swin backbone is always fully frozen; `head_lr` applies to FPN + RetinaNet."""
+    """Hyperparameters; ``head_lr`` is the sole LR for FPN + RetinaNet (Swin frozen)."""
 
     name: str = "default"
     seed: int = 946
@@ -78,7 +76,7 @@ class TrainConfig:
 
 
 def default_presets() -> list[TrainConfig]:
-    """Hyperparameter presets (Swin always frozen; only FPN + head vary)."""
+    """Named grids for ``--preset`` / ``--sweep`` (head LR and regularisation only)."""
     return [
         TrainConfig(name="default", head_lr=2e-4, weight_decay=1e-4, warmup_epochs=5),
         TrainConfig(name="head_lr_high", head_lr=5e-4, weight_decay=1e-4, warmup_epochs=5),
@@ -90,6 +88,7 @@ def default_presets() -> list[TrainConfig]:
 
 
 def _select_device() -> torch.device:
+    """Prefer CUDA, then MPS if usable, else CPU."""
     if torch.cuda.is_available():
         return torch.device("cuda")
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
@@ -105,6 +104,7 @@ DEVICE = _select_device()
 
 
 def set_seed(seed: int):
+    """Fix RNGs for reproducibility (best-effort on GPU)."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -113,6 +113,7 @@ def set_seed(seed: int):
 
 
 def _list_images(img_dir: Path) -> list[Path]:
+    """Collect image paths for supported extensions, sorted by filename."""
     if not img_dir.is_dir():
         raise FileNotFoundError(f"Image directory not found: {img_dir}")
     files: list[Path] = []
@@ -125,6 +126,7 @@ def _list_images(img_dir: Path) -> list[Path]:
 
 
 def _pil_can_decode(path: Path) -> bool:
+    """Return True if PIL can fully decode ``path`` (filters corrupt files)."""
     try:
         with Image.open(path) as im:
             im.load()
@@ -134,6 +136,7 @@ def _pil_can_decode(path: Path) -> bool:
 
 
 def _filter_readable(paths: list[Path], label: str) -> list[Path]:
+    """Keep only decodable images; log a short warning if any are dropped."""
     ok, bad = [], []
     for p in paths:
         (ok if _pil_can_decode(p) else bad).append(p)
@@ -145,10 +148,9 @@ def _filter_readable(paths: list[Path], label: str) -> list[Path]:
     return ok
 
 
-# ============================================================
-# Dataset
-# ============================================================
 class TrafficDetectionDataset(Dataset):
+    """YOLO boxes → pixel xyxy + torchvision detection targets (``iscrowd``, ``area``)."""
+
     def __init__(self, data_root: Path, split: str, augment: bool = False):
         self.img_dir = Path(data_root) / "images" / split
         self.lbl_dir = Path(data_root) / "labels" / split
@@ -169,6 +171,7 @@ class TrafficDetectionDataset(Dataset):
 
     @staticmethod
     def _parse_yolo_label(path: Path, img_w: int, img_h: int):
+        """Parse one label file; YOLO class ids are shifted by +1 for RetinaNet."""
         boxes, labels = [], []
         if not path.exists():
             return boxes, labels
@@ -184,7 +187,7 @@ class TrafficDetectionDataset(Dataset):
                 x2 = (xc + bw / 2.0) * img_w
                 y2 = (yc + bh / 2.0) * img_h
                 boxes.append([x1, y1, x2, y2])
-                labels.append(cls + 1)
+                labels.append(cls + 1)  # foreground classes start at 1
         return boxes, labels
 
     def __getitem__(self, idx):
@@ -239,20 +242,20 @@ class TrafficDetectionDataset(Dataset):
 
 
 def _collate(batch):
+    """Detection-style batching: list of images, list of target dicts."""
     return tuple(zip(*batch))
 
 
-# ============================================================
-# Model
-# ============================================================
 class SwinBackboneWithFPN(nn.Module):
+    """Swin-T ``features`` are inference-only; FPN is trained with RetinaNet."""
+
     BLOCK_STAGE_INDICES = (1, 3, 5, 7)
 
     def __init__(self):
+        """Load ImageNet weights, freeze all Swin stages; FPN parameters stay trainable."""
         super().__init__()
         swin = swin_t(weights=Swin_T_Weights.DEFAULT)
         self.stages = swin.features
-        # Entire Swin feature stack frozen — only FPN + RetinaNet train.
         for p in self.stages.parameters():
             p.requires_grad = False
 
@@ -268,11 +271,12 @@ class SwinBackboneWithFPN(nn.Module):
         for i, layer in enumerate(self.stages):
             x = layer(x)
             if i in self.BLOCK_STAGE_INDICES:
-                fmaps[str(len(fmaps))] = x.permute(0, 3, 1, 2).contiguous()
+                fmaps[str(len(fmaps))] = x.permute(0, 3, 1, 2).contiguous()  # NHWC → NCHW
         return self.fpn(fmaps)
 
 
 def build_model(cfg: TrainConfig) -> RetinaNet:
+    """Construct RetinaNet with custom anchors and resize bounds from ``cfg``."""
     backbone = SwinBackboneWithFPN()
     anchor_sizes = ((32,), (64,), (128,), (256,), (512,))
     aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
@@ -290,6 +294,7 @@ def build_model(cfg: TrainConfig) -> RetinaNet:
 
 
 def get_optimizer_and_scheduler(model: nn.Module, cfg: TrainConfig):
+    """Single AdamW over trainable tensors (FPN + head); Swin has no grads."""
     trainable = [p for p in model.parameters() if p.requires_grad]
     if not trainable:
         raise RuntimeError("No trainable parameters (FPN + head should be trainable).")
@@ -312,9 +317,6 @@ def get_optimizer_and_scheduler(model: nn.Module, cfg: TrainConfig):
     return optimizer, scheduler
 
 
-# ============================================================
-# Training / validation  (AMP + gradient accumulation)
-# ============================================================
 def train_one_epoch(
     model: nn.Module,
     loader: DataLoader,
@@ -323,6 +325,7 @@ def train_one_epoch(
     scaler: GradScaler | None,
     accum_steps: int,
 ):
+    """One pass; loss is scaled for gradient accumulation before backward."""
     model.train()
     running = 0.0
     n = len(loader)
@@ -363,6 +366,7 @@ def train_one_epoch(
 
 @torch.no_grad()
 def validate(model, loader, device, scaler: GradScaler | None):
+    """Mean RetinaNet training loss on ``loader`` (``model.train()`` required for loss dict)."""
     model.train()
     total = 0.0
     n = len(loader)
@@ -380,6 +384,7 @@ def validate(model, loader, device, scaler: GradScaler | None):
 
 @torch.no_grad()
 def collect_predictions(model, loader, device, scaler: GradScaler | None):
+    """Run NMS inference and return per-image dicts on CPU for metric code."""
     model.eval()
     all_preds, all_targets = [], []
     for images, targets in loader:
@@ -394,10 +399,8 @@ def collect_predictions(model, loader, device, scaler: GradScaler | None):
     return all_preds, all_targets
 
 
-# ============================================================
-# Evaluation
-# ============================================================
 def _compute_ap(recalls: np.ndarray, precisions: np.ndarray) -> float:
+    """Area under the precision–recall curve (VOC-style integral)."""
     mrec = np.concatenate(([0.0], recalls, [1.0]))
     mpre = np.concatenate(([1.0], precisions, [0.0]))
     for i in range(len(mpre) - 2, -1, -1):
@@ -407,6 +410,7 @@ def _compute_ap(recalls: np.ndarray, precisions: np.ndarray) -> float:
 
 
 def _evaluate_at_iou(all_preds, all_targets, iou_thresh: float):
+    """Greedy per-image matching; returns per-class AP and PR arrays at one IoU."""
     cls_data = defaultdict(lambda: {"scores": [], "tp": [], "n_gt": 0})
 
     for pred, tgt in zip(all_preds, all_targets):
@@ -476,6 +480,7 @@ def _evaluate_at_iou(all_preds, all_targets, iou_thresh: float):
 
 
 def evaluate(all_preds, all_targets):
+    """mAP@0.5, mAP@0.5:0.95 (mean over IoU 0.5:0.95 step 0.05), F1 at IoU 0.5."""
     iou_thresholds = np.arange(0.5, 1.0, 0.05)
     aps_per_thresh = []
     results_50, pr_curves_50 = None, None
@@ -505,9 +510,6 @@ def evaluate(all_preds, all_targets):
     }
 
 
-# ============================================================
-# Plotting
-# ============================================================
 def _save_dual_curve(
     train_vals: list[float],
     val_vals: list[float],
@@ -517,6 +519,7 @@ def _save_dual_curve(
     out_dir: Path,
     ylim: tuple[float, float] | None = None,
 ):
+    """Plot train vs val series; train may be shorter (interpolated x-axis)."""
     if not val_vals:
         return
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -544,6 +547,7 @@ def _save_dual_curve(
 
 
 def save_loss_curves(train_losses, val_losses, out_dir: Path):
+    """Write ``loss_curves.png``."""
     _save_dual_curve(
         train_losses, val_losses, "Loss",
         "Swin-T + RetinaNet — Training & Validation Loss",
@@ -552,6 +556,7 @@ def save_loss_curves(train_losses, val_losses, out_dir: Path):
 
 
 def save_ap50_curves(train_vals, val_vals, out_dir: Path):
+    """Write ``ap50_curves.png``."""
     _save_dual_curve(
         train_vals, val_vals, "mAP @ IoU=0.5",
         "Swin-T + RetinaNet — mAP@0.5 (Train vs Val)",
@@ -560,6 +565,7 @@ def save_ap50_curves(train_vals, val_vals, out_dir: Path):
 
 
 def save_ap50_95_curves(train_vals, val_vals, out_dir: Path):
+    """Write ``ap50_95_curves.png``."""
     _save_dual_curve(
         train_vals, val_vals, "mAP @ IoU=0.50:0.95",
         "Swin-T + RetinaNet — mAP@0.50:0.95 (Train vs Val)",
@@ -568,6 +574,7 @@ def save_ap50_95_curves(train_vals, val_vals, out_dir: Path):
 
 
 def save_f1_curves(train_vals, val_vals, out_dir: Path):
+    """Write ``f1_curves.png``."""
     _save_dual_curve(
         train_vals, val_vals, "F1 Score (max from PR curve)",
         "Swin-T + RetinaNet — F1 Score (Train vs Val)",
@@ -576,7 +583,7 @@ def save_f1_curves(train_vals, val_vals, out_dir: Path):
 
 
 def save_lr_curves(lrs: list[float], out_dir: Path):
-    """Single LR curve — Swin frozen; schedule applies to FPN + RetinaNet only."""
+    """Log-scale LR plot for the single trainable parameter group (FPN + head)."""
     if not lrs:
         return
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -596,6 +603,7 @@ def save_lr_curves(lrs: list[float], out_dir: Path):
 
 
 def save_train_val_gap_ap50(train_ap50, val_ap50, out_dir: Path):
+    """Plot train minus val AP@0.5 per epoch (overfitting when positive)."""
     if not train_ap50 or not val_ap50:
         return
     n = min(len(train_ap50), len(val_ap50))
@@ -621,6 +629,7 @@ def save_per_class_metric_curves(
     per_class: dict[str, list[float]], ylabel: str,
     title: str, fname: str, out_dir: Path,
 ):
+    """Per-class validation metric vs epoch (e.g. AP@0.5 or F1)."""
     if not per_class:
         return
     n = max(len(v) for v in per_class.values()) if per_class else 0
@@ -647,6 +656,7 @@ def save_metrics_overview(
     train_losses, val_losses, train_ap50, val_ap50,
     train_ap5095, val_ap5095, train_f1, val_f1, out_dir: Path,
 ):
+    """2×2 summary figure: loss, mAP@0.5, mAP@0.5:0.95, mean F1."""
     if not val_losses:
         return
     fig, axes = plt.subplots(2, 2, figsize=(11, 8))
@@ -698,6 +708,7 @@ def save_metrics_overview(
 
 
 def save_precision_recall_bars(per_class: dict, out_dir: Path, split_name: str):
+    """Grouped bar chart of last-threshold precision and recall per class."""
     names = list(per_class.keys())
     if not names:
         return
@@ -724,6 +735,7 @@ def save_precision_recall_bars(per_class: dict, out_dir: Path, split_name: str):
 
 
 def save_ap_per_iou_bar(aps: list[float], out_dir: Path):
+    """Bar chart of mean AP vs IoU on the test split."""
     if not aps:
         return
     labels = [f"{0.5 + 0.05 * i:.2f}" for i in range(len(aps))]
@@ -743,6 +755,7 @@ def save_ap_per_iou_bar(aps: list[float], out_dir: Path):
 
 
 def save_pr_curves(pr_curves: dict, out_dir: Path):
+    """Per-class precision–recall curves at IoU 0.5."""
     fig, ax = plt.subplots(figsize=(8, 5))
     for cls_name, (rec, prec) in pr_curves.items():
         ax.plot(rec, prec, linewidth=2, label=cls_name)
@@ -761,6 +774,7 @@ def save_pr_curves(pr_curves: dict, out_dir: Path):
 
 
 def compute_ap_per_iou_threshold(all_preds, all_targets) -> list[float]:
+    """Mean AP at each COCO IoU threshold (for the test-set bar chart)."""
     out = []
     for iou_t in np.arange(0.5, 1.0, 0.05):
         results, _ = _evaluate_at_iou(all_preds, all_targets, float(iou_t))
@@ -769,14 +783,12 @@ def compute_ap_per_iou_threshold(all_preds, all_targets) -> list[float]:
     return out
 
 
-# ============================================================
-# One training run
-# ============================================================
 def run_training(
     cfg: TrainConfig,
     data_dir: Path,
     output_dir: Path,
 ) -> dict[str, Any]:
+    """Full fit: train/val loop, plots, best checkpoint by val mAP@0.5, test metrics."""
     set_seed(cfg.seed)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -834,7 +846,6 @@ def run_training(
     optimizer, scheduler = get_optimizer_and_scheduler(model, cfg)
     scaler = GradScaler("cuda") if (cfg.use_amp and DEVICE.type == "cuda") else None
 
-    # Metric storage — val: every epoch, train: every train_eval_every epochs
     train_losses: list[float] = []
     val_losses: list[float] = []
     val_ap50: list[float] = []
@@ -862,11 +873,9 @@ def run_training(
         )
         val_loss = validate(model, val_loader, DEVICE, scaler)
 
-        # Val metrics — every epoch
         val_preds, val_targets = collect_predictions(model, val_loader, DEVICE, scaler)
         val_m = evaluate(val_preds, val_targets)
 
-        # Train metrics — only every N epochs (expensive on 7k images)
         do_train_eval = (
             ep1 % cfg.train_eval_every == 0
             or ep1 == 1
@@ -926,7 +935,6 @@ def run_training(
             torch.save(model.state_dict(), output_dir / "best_model.pt")
             print(f"    ✓ best_model.pt (val mAP@0.5={best_val_map:.4f})")
 
-    # ---- Save final model & plots ----
     torch.save(model.state_dict(), output_dir / "final_model.pt")
     print("\nTraining complete.  Models saved to:", output_dir)
 
@@ -954,7 +962,6 @@ def run_training(
         "per_class_f1_val.png", output_dir,
     )
 
-    # ---- Test evaluation ----
     print("\n=== Test evaluation (best checkpoint) ===")
     state = torch.load(
         output_dir / "best_model.pt", map_location=DEVICE, weights_only=True,
@@ -1003,10 +1010,8 @@ def run_training(
     return summary
 
 
-# ============================================================
-# CLI
-# ============================================================
 def parse_args():
+    """Define CLI; defaults for paths come from module-level ``DEFAULT_*``."""
     p = argparse.ArgumentParser(
         description="Swin-T frozen + FPN + RetinaNet (no backbone fine-tuning).",
     )
@@ -1034,6 +1039,7 @@ def parse_args():
 
 
 def _merge_cli(cfg: TrainConfig, args) -> TrainConfig:
+    """Overlay non-None CLI arguments onto ``cfg``."""
     if args.epochs is not None:
         cfg.num_epochs = args.epochs
     if args.batch_size is not None:
@@ -1060,6 +1066,7 @@ def _merge_cli(cfg: TrainConfig, args) -> TrainConfig:
 
 
 def main():
+    """Entry: single run, or ``--sweep`` over presets into subfolders."""
     args = parse_args()
     data_dir = args.data_dir or DEFAULT_DATA_DIR
     base_out: Path = args.output_dir
