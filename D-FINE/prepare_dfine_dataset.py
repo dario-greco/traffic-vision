@@ -16,13 +16,13 @@ Expected output layout (relative to D-FINE/)::
         │   ├── instances_val.json
         │   └── instances_test.json
         └── images/
-            ├── train/  → ../../yolo_dataset/images/train/  (symlinks per image)
-            ├── val/    → ../../yolo_dataset/images/val/    (symlinks per image)
-            └── test/   → ../../yolo_dataset/images/test/   (symlinks per image)
+            ├── train/  → absolute path into data_final/images/train/  (symlinks per image)
+            ├── val/    → …/val/
+            └── test/   → …/test/
 
 Usage (from D-FINE/ folder):
     python prepare_dfine_dataset.py
-    python prepare_dfine_dataset.py --yolo-dataset ../yolo_dataset --dataset-dir custom/dataset
+    python prepare_dfine_dataset.py --yolo-dataset data_final --dataset-dir custom/dataset
     python prepare_dfine_dataset.py --splits train val            # skip test
     python prepare_dfine_dataset.py --copy                        # copy instead of symlink
 """
@@ -34,7 +34,7 @@ import shutil
 from pathlib import Path
 
 from convert_yolo_to_coco import convert_split
-from utils import get_class_names, load_dataset_yaml
+from utils import dfine_root, get_class_names, load_dataset_yaml
 
 
 # ── Image linking helpers ─────────────────────────────────────────────────────
@@ -144,8 +144,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--yolo-dataset",
         type=Path,
-        default=Path(__file__).parent.parent / "yolo_dataset",
-        help="Root of the source YOLO dataset.",
+        default=dfine_root() / "data_final",
+        help="Root of the source YOLO dataset (images/, labels/, dataset.yaml).",
     )
     p.add_argument(
         "--dataset-dir",

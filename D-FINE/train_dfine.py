@@ -7,6 +7,12 @@ This is a thin wrapper around the official D-FINE ``train.py``.  It:
 3. Validates that the pre-trained weights exist (or offers to download them).
 4. Builds and executes the ``torchrun`` training command.
 
+By default this script also:
+- Passes ``epochs=60`` to the trainer (override with ``--override epochs=N``).
+- If ``output_dir/best_stg2.pth`` or ``output_dir/best_stg1.pth`` exists and you
+  did not pass ``--resume``, it resumes from that checkpoint (full solver state).
+  Use ``--from-scratch`` to always start from ``--weights`` (-t) instead.
+
 All training hyper-parameters live in the YAML config; this script only handles
 the command-line plumbing.
 
@@ -17,11 +23,14 @@ Usage (from D-FINE/ folder):
     # Multi-GPU on one node
     python train_dfine.py --nproc 4
 
-    # Resume an interrupted run
-    python train_dfine.py --resume output/dfine_m_traffic/checkpoint0050.pth
+    # Resume a specific checkpoint (wins over auto best)
+    python train_dfine.py --resume output/dfine_m_traffic/last.pth
 
     # Override config values on the fly
-    python train_dfine.py --override epoches=36 optimizer.lr=0.0001
+    python train_dfine.py --override epochs=36 optimizer.lr=0.0001
+
+    # Ignore saved best checkpoints; fine-tune from pretrained -t again
+    python train_dfine.py --from-scratch
 """
 
 from __future__ import annotations
@@ -32,7 +41,31 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 from utils import assert_dfine_cloned, dfine_root
+
+
+# Default total epochs forwarded to train.py unless ``--override epochs=...``.
+DEFAULT_TRAIN_EPOCHS = 60
+
+
+def _output_dir_from_config(config_path: Path, root: Path) -> Path:
+    """Resolve ``output_dir`` from the top-level YAML (same key as in traffic config)."""
+    with open(config_path, encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    rel = data.get("output_dir", "output/dfine_m_traffic")
+    p = Path(rel)
+    return p.resolve() if p.is_absolute() else (root / p).resolve()
+
+
+def _find_best_checkpoint(output_dir: Path) -> Path | None:
+    """Return best saved weights if present (stage 2 preferred over stage 1)."""
+    for name in ("best_stg2.pth", "best_stg1.pth"):
+        ckpt = output_dir / name
+        if ckpt.is_file():
+            return ckpt
+    return None
 
 
 # ── Validation helpers ────────────────────────────────────────────────────────
@@ -124,9 +157,12 @@ def build_command(
 
     cmd += [f"--seed={seed}"]
 
-    # Extra config overrides (passed through after --)
+    # train.py expects ``-u key=value ...`` for YAML updates (see yaml_utils.parse_cli).
     if overrides:
-        cmd += overrides
+        if overrides[0] in ("-u", "--update"):
+            cmd += overrides
+        else:
+            cmd += ["-u", *overrides]
 
     return cmd
 
@@ -156,7 +192,15 @@ def parse_args() -> argparse.Namespace:
         "--resume",
         type=Path,
         default=None,
-        help="Checkpoint to resume an interrupted training run (-r flag).",
+        help=(
+            "Checkpoint to resume (-r). If omitted, a best_stg2/best_stg1 under "
+            "the config's output_dir is used automatically unless --from-scratch."
+        ),
+    )
+    p.add_argument(
+        "--from-scratch",
+        action="store_true",
+        help="Do not auto-resume from best_stg*.pth; use --weights (-t) like a new fine-tune.",
     )
     p.add_argument(
         "--dataset-dir",
@@ -210,8 +254,8 @@ def parse_args() -> argparse.Namespace:
         default=[],
         metavar="KEY=VALUE",
         help=(
-            "Extra config overrides forwarded to train.py, e.g. "
-            "--override epoches=72 optimizer.lr=0.00025"
+            "Extra YAML updates for train.py (-u), e.g. "
+            "--override epochs=72 optimizer.lr=0.00025"
         ),
     )
     return p.parse_args()
@@ -225,15 +269,6 @@ def main() -> None:
     assert_dfine_cloned(root)
     _check_dataset(args.dataset_dir.resolve())
 
-    weights: Path | None = None
-    if args.resume is None:
-        _check_or_download_weights(
-            weights_path = args.weights.resolve(),
-            model        = args.model,
-            pretrain     = args.pretrain,
-        )
-        weights = args.weights.resolve()
-
     config = args.config.resolve()
     if not config.exists():
         raise FileNotFoundError(
@@ -241,16 +276,36 @@ def main() -> None:
             "Run the setup or check the path."
         )
 
+    resume_path: Path | None = args.resume.resolve() if args.resume else None
+    if resume_path is None and not args.from_scratch:
+        auto_best = _find_best_checkpoint(_output_dir_from_config(config, root))
+        if auto_best is not None:
+            resume_path = auto_best
+            print(f"Using best checkpoint (auto): {resume_path}\n")
+
+    weights: Path | None = None
+    if resume_path is None:
+        _check_or_download_weights(
+            weights_path = args.weights.resolve(),
+            model        = args.model,
+            pretrain     = args.pretrain,
+        )
+        weights = args.weights.resolve()
+
+    overrides = list(args.override or [])
+    if not any(o.split("=", 1)[0] == "epochs" for o in overrides):
+        overrides.insert(0, f"epochs={DEFAULT_TRAIN_EPOCHS}")
+
     # ── Build command ─────────────────────────────────────────────────────────
     cmd = build_command(
         config    = config,
         weights   = weights,
-        resume    = args.resume.resolve() if args.resume else None,
+        resume    = resume_path,
         nproc     = args.nproc,
         port      = args.port,
         use_amp   = not args.no_amp,
         seed      = args.seed,
-        overrides = args.override or [],
+        overrides = overrides,
         root      = root,
     )
 

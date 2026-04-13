@@ -41,10 +41,10 @@ val_dataloader:
 
 
 # ── Training schedule ─────────────────────────────────────────────────────────
-# Fine-tuning typically needs far fewer epochs than training from scratch.
-# 72 epochs is a good baseline for a small dataset (~400 images).
-# Increase to 100–150 if you have more data or want higher AP.
-epoches: 72
+# D-FINE reads the key ``epochs`` (see BaseConfig). A typo ``epoches`` is ignored,
+# so the base template's ``epochs: 132`` would otherwise win.
+# train_dfine.py also passes epochs=60 by default unless you use --override epochs=N.
+epochs: 60
 
 # ── Early stopping ─────────────────────────────────────────────────────────
 # Stop training when val AP@0.50:0.95 has not improved for this many epochs.

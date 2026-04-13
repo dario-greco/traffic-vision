@@ -4,7 +4,7 @@ Convert a YOLO-format dataset to COCO JSON annotations.
 Usage (from D-FINE/ folder):
     python convert_yolo_to_coco.py
     python convert_yolo_to_coco.py --splits train val test
-    python convert_yolo_to_coco.py --yolo-dataset ../my_dataset --output-dir custom/dataset/annotations
+    python convert_yolo_to_coco.py --yolo-dataset data_final --output-dir custom/dataset/annotations
 
 Coordinate conversion
 ---------------------
@@ -28,7 +28,7 @@ import argparse
 import json
 from pathlib import Path
 
-from utils import get_class_names, image_size, load_dataset_yaml
+from utils import dfine_root, get_class_names, image_size, load_dataset_yaml
 
 
 # ── Coordinate conversion ─────────────────────────────────────────────────────
@@ -116,9 +116,18 @@ def convert_split(
     coco_annotations: list[dict] = []
     ann_id = 0
     missing_labels = 0
+    skipped_images = 0
+    skip_examples: list[str] = []
+    img_id = 0
 
-    for img_id, img_path in enumerate(image_files):
-        w, h = image_size(img_path)
+    for img_path in image_files:
+        try:
+            w, h = image_size(img_path)
+        except Exception as exc:
+            skipped_images += 1
+            if verbose and len(skip_examples) < 5:
+                skip_examples.append(f"{img_path.name} ({exc})")
+            continue
 
         coco_images.append(
             {
@@ -134,6 +143,7 @@ def convert_split(
         if not label_path.exists():
             # Treat as an unannotated image — valid in COCO (zero annotations).
             missing_labels += 1
+            img_id += 1
             continue
 
         with open(label_path) as fh:
@@ -169,11 +179,22 @@ def convert_split(
             )
             ann_id += 1
 
+        img_id += 1
+
     if verbose:
+        skip_msg = f" | {skipped_images} invalid/skipped" if skipped_images else ""
         print(
             f"  [{split:5s}] {len(coco_images):4d} images | "
             f"{len(coco_annotations):5d} annotations | "
-            f"{missing_labels} images without labels"
+            f"{missing_labels} images without labels{skip_msg}"
+        )
+        if skip_examples:
+            print("    (examples: " + "; ".join(skip_examples) + ")")
+
+    if not coco_images:
+        raise ValueError(
+            f"No valid images in {split_images} after reading {len(image_files)} paths. "
+            "Files may be corrupt, zero-byte, or Git LFS pointer stubs — replace them with real JPEG/PNG."
         )
 
     return {
@@ -193,7 +214,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--yolo-dataset",
         type=Path,
-        default=Path(__file__).parent.parent / "yolo_dataset",
+        default=dfine_root() / "data_final",
         help="Root of the YOLO dataset (must contain images/, labels/, dataset.yaml).",
     )
     p.add_argument(
