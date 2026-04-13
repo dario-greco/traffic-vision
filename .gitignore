@@ -9,7 +9,13 @@ __pycache__/
 yolo_dataset/
 runs/
 logs/
+# Ignore all data and images
+data_final/
+*.jpg
+*.png
 
+# Ignore test outputs
+augmentation_test.png
 # --- Model Weights ---
 # These are large binary files that belong on the cluster, not GitHub
 *.pt
