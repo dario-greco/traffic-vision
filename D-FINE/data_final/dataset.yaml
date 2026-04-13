@@ -1,0 +1,5 @@
+# Required by prepare_dfine_dataset.py (class names → COCO categories).
+# Edit labels below to match your labeling convention (order must match YOLO class ids 0, 1, …).
+names:
+  0: traffic_light
+  1: traffic_sign
