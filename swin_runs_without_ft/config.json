@@ -1,0 +1,17 @@
+{
+  "name": "single",
+  "seed": 946,
+  "batch_size": 8,
+  "eval_batch_size": 16,
+  "num_epochs": 20,
+  "head_lr": 0.0002,
+  "weight_decay": 0.0001,
+  "warmup_epochs": 5,
+  "num_workers": 8,
+  "score_thresh": 0.05,
+  "min_size": 800,
+  "max_size": 1333,
+  "accum_steps": 2,
+  "use_amp": true,
+  "train_eval_every": 5
+}

@@ -1,0 +1,23 @@
+{
+  "preset": "single",
+  "frozen_backbone": "full_swin_features",
+  "trainable": "fpn_and_retinanet_head",
+  "best_val_mAP_50": 0.508482180450026,
+  "test_mAP_50": 0.5160346190399193,
+  "test_mAP_50_95": 0.2047127784318369,
+  "test_mean_f1": 0.5424210874857329,
+  "per_class_test": {
+    "stop sign": {
+      "AP": 0.49597260926808207,
+      "precision": 0.057215863440591125,
+      "recall": 0.8325028746646225,
+      "max_f1": 0.5354219252827584
+    },
+    "traffic light": {
+      "AP": 0.5360966288117566,
+      "precision": 0.05672332196340243,
+      "recall": 0.8361266294227188,
+      "max_f1": 0.5494202496887075
+    }
+  }
+}

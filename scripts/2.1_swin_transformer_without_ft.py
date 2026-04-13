@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 """
-2.1_swin_transformer.py
-========================
-Swin-T backbone + FPN + RetinaNet for stop-sign / traffic-light detection.
+2.1_swin_transformer_without_ft.py
+==================================
+Swin-T **frozen** ImageNet backbone + trainable FPN + RetinaNet for
+stop-sign / traffic-light detection.  All Swin `features` blocks are
+frozen; only ``backbone.fpn`` and the detection head are updated.
 
-Key training optimisations (vs. previous version):
-  * AMP mixed-precision  → ~40 % faster forward/backward on L40S
-  * Gradient accumulation → large effective batch without OOM
-  * Train-eval only every N epochs (configurable) → halves wall-time
-  * persistent_workers + higher num_workers → faster data loading
-  * Separate eval_batch_size (larger, no grads) → faster inference
+Same optimisations as 2.1_swin_transformer.py (AMP, accum, train-eval stride, etc.).
 
 Usage:
-    python scripts/2.1_swin_transformer.py
-    python scripts/2.1_swin_transformer.py --sweep --epochs 25
-    python scripts/2.1_swin_transformer.py --preset freeze_less
+    python scripts/2.1_swin_transformer_without_ft.py
+    python scripts/2.1_swin_transformer_without_ft.py --epochs 25 --head-lr 3e-4
 """
 
 from __future__ import annotations
@@ -52,7 +48,7 @@ from torchvision.ops.feature_pyramid_network import LastLevelMaxPool
 # ============================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DATA_DIR = BASE_DIR / "dataset"
-DEFAULT_OUTPUT_DIR = BASE_DIR / "swin_runs"
+DEFAULT_OUTPUT_DIR = BASE_DIR / "swin_runs_without_ft"
 
 CLASS_NAMES = {0: "stop sign", 1: "traffic light"}
 NUM_CLASSES = len(CLASS_NAMES) + 1
@@ -62,18 +58,18 @@ IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG")
 
 @dataclass
 class TrainConfig:
+    """Swin backbone is always fully frozen; `head_lr` applies to FPN + RetinaNet."""
+
     name: str = "default"
     seed: int = 946
     batch_size: int = 8
     eval_batch_size: int = 16
     num_epochs: int = 20
     head_lr: float = 2e-4
-    backbone_lr: float = 2e-5
     weight_decay: float = 1e-4
     warmup_epochs: int = 5
     num_workers: int = 8
     score_thresh: float = 0.05
-    freeze_stages: int = 4
     min_size: int = 800
     max_size: int = 1333
     accum_steps: int = 2
@@ -82,71 +78,14 @@ class TrainConfig:
 
 
 def default_presets() -> list[TrainConfig]:
+    """Hyperparameter presets (Swin always frozen; only FPN + head vary)."""
     return [
-        TrainConfig(
-            name="default",
-            head_lr=2e-4,
-            backbone_lr=2e-5,
-            freeze_stages=4,
-            weight_decay=1e-4,
-            warmup_epochs=5,
-        ),
-        TrainConfig(
-            name="head_lr_high",
-            head_lr=5e-4,
-            backbone_lr=1e-5,
-            freeze_stages=4,
-            weight_decay=1e-4,
-            warmup_epochs=5,
-        ),
-        TrainConfig(
-            name="head_lr_low",
-            head_lr=1e-4,
-            backbone_lr=3e-5,
-            freeze_stages=4,
-            weight_decay=1e-4,
-            warmup_epochs=5,
-        ),
-        TrainConfig(
-            name="freeze_more",
-            head_lr=3e-4,
-            backbone_lr=5e-5,
-            freeze_stages=6,
-            weight_decay=1e-4,
-            warmup_epochs=5,
-        ),
-        TrainConfig(
-            name="freeze_less",
-            head_lr=2e-4,
-            backbone_lr=1e-5,
-            freeze_stages=2,
-            weight_decay=1e-4,
-            warmup_epochs=5,
-        ),
-        TrainConfig(
-            name="wd_high",
-            head_lr=2e-4,
-            backbone_lr=2e-5,
-            freeze_stages=4,
-            weight_decay=5e-4,
-            warmup_epochs=5,
-        ),
-        TrainConfig(
-            name="wd_low",
-            head_lr=2e-4,
-            backbone_lr=2e-5,
-            freeze_stages=4,
-            weight_decay=5e-5,
-            warmup_epochs=5,
-        ),
-        TrainConfig(
-            name="long_warmup",
-            head_lr=2e-4,
-            backbone_lr=2e-5,
-            freeze_stages=4,
-            weight_decay=1e-4,
-            warmup_epochs=10,
-        ),
+        TrainConfig(name="default", head_lr=2e-4, weight_decay=1e-4, warmup_epochs=5),
+        TrainConfig(name="head_lr_high", head_lr=5e-4, weight_decay=1e-4, warmup_epochs=5),
+        TrainConfig(name="head_lr_low", head_lr=1e-4, weight_decay=1e-4, warmup_epochs=5),
+        TrainConfig(name="wd_high", head_lr=2e-4, weight_decay=5e-4, warmup_epochs=5),
+        TrainConfig(name="wd_low", head_lr=2e-4, weight_decay=5e-5, warmup_epochs=5),
+        TrainConfig(name="long_warmup", head_lr=2e-4, weight_decay=1e-4, warmup_epochs=10),
     ]
 
 
@@ -309,15 +248,13 @@ def _collate(batch):
 class SwinBackboneWithFPN(nn.Module):
     BLOCK_STAGE_INDICES = (1, 3, 5, 7)
 
-    def __init__(self, freeze_stages: int):
+    def __init__(self):
         super().__init__()
         swin = swin_t(weights=Swin_T_Weights.DEFAULT)
         self.stages = swin.features
-
-        for i, stage in enumerate(self.stages):
-            if i < freeze_stages:
-                for param in stage.parameters():
-                    param.requires_grad = False
+        # Entire Swin feature stack frozen — only FPN + RetinaNet train.
+        for p in self.stages.parameters():
+            p.requires_grad = False
 
         self.fpn = FeaturePyramidNetwork(
             in_channels_list=[96, 192, 384, 768],
@@ -336,7 +273,7 @@ class SwinBackboneWithFPN(nn.Module):
 
 
 def build_model(cfg: TrainConfig) -> RetinaNet:
-    backbone = SwinBackboneWithFPN(freeze_stages=cfg.freeze_stages)
+    backbone = SwinBackboneWithFPN()
     anchor_sizes = ((32,), (64,), (128,), (256,), (512,))
     aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
     anchor_gen = AnchorGenerator(sizes=anchor_sizes, aspect_ratios=aspect_ratios)
@@ -353,20 +290,13 @@ def build_model(cfg: TrainConfig) -> RetinaNet:
 
 
 def get_optimizer_and_scheduler(model: nn.Module, cfg: TrainConfig):
-    backbone_params, other_params = [], []
-    for name, param in model.named_parameters():
-        if not param.requires_grad:
-            continue
-        if "backbone.stages" in name:
-            backbone_params.append(param)
-        else:
-            other_params.append(param)
+    trainable = [p for p in model.parameters() if p.requires_grad]
+    if not trainable:
+        raise RuntimeError("No trainable parameters (FPN + head should be trainable).")
 
     optimizer = optim.AdamW(
-        [
-            {"params": backbone_params, "lr": cfg.backbone_lr},
-            {"params": other_params, "lr": cfg.head_lr},
-        ],
+        trainable,
+        lr=cfg.head_lr,
         weight_decay=cfg.weight_decay,
     )
 
@@ -645,16 +575,16 @@ def save_f1_curves(train_vals, val_vals, out_dir: Path):
     )
 
 
-def save_lr_curves(head_lrs: list[float], backbone_lrs: list[float], out_dir: Path):
-    if not head_lrs:
+def save_lr_curves(lrs: list[float], out_dir: Path):
+    """Single LR curve — Swin frozen; schedule applies to FPN + RetinaNet only."""
+    if not lrs:
         return
     fig, ax = plt.subplots(figsize=(8, 5))
-    epochs = range(1, len(head_lrs) + 1)
-    ax.plot(epochs, head_lrs, label="Head LR", linewidth=2)
-    ax.plot(epochs, backbone_lrs, label="Backbone LR", linewidth=2)
+    epochs = range(1, len(lrs) + 1)
+    ax.plot(epochs, lrs, label="FPN + RetinaNet LR", linewidth=2, color="tab:blue")
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Learning rate")
-    ax.set_title("Learning Rate Schedule")
+    ax.set_title("Learning rate (frozen Swin backbone)")
     ax.set_yscale("log")
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -856,8 +786,7 @@ def run_training(
     print(f"Device : {DEVICE}")
     print(f"Data   : {data_dir}")
     print(f"Output : {output_dir}")
-    print(f"Config : {cfg.name}  head_lr={cfg.head_lr}  backbone_lr={cfg.backbone_lr}  "
-          f"freeze_stages={cfg.freeze_stages}  wd={cfg.weight_decay}")
+    print(f"Config : {cfg.name}  lr(FPN+head)={cfg.head_lr}  wd={cfg.weight_decay}")
     print(f"  batch={cfg.batch_size}  eval_batch={cfg.eval_batch_size}  "
           f"accum={cfg.accum_steps}  (effective batch={cfg.batch_size * cfg.accum_steps})  "
           f"AMP={cfg.use_amp}  train_eval_every={cfg.train_eval_every}")
@@ -899,8 +828,8 @@ def run_training(
     n_total = sum(p.numel() for p in model.parameters()) / 1e6
     n_train = sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6
     print(f"\n  Parameters : {n_total:.1f} M total, {n_train:.1f} M trainable")
-    print(f"  Frozen     : stages 0–{cfg.freeze_stages - 1}  |  "
-          f"Fine-tuned : stages {cfg.freeze_stages}–7")
+    print("  Frozen     : full Swin-T `features` (ImageNet weights)")
+    print("  Trainable  : FPN + RetinaNet head only")
 
     optimizer, scheduler = get_optimizer_and_scheduler(model, cfg)
     scaler = GradScaler("cuda") if (cfg.use_amp and DEVICE.type == "cuda") else None
@@ -915,7 +844,6 @@ def run_training(
     train_ap50_95: list[float] = []
     train_f1: list[float] = []
     head_lrs: list[float] = []
-    backbone_lrs: list[float] = []
 
     cls_names = list(CLASS_NAMES.values())
     val_ap50_per_class: dict[str, list[float]] = {c: [] for c in cls_names}
@@ -954,8 +882,7 @@ def run_training(
             train_f1.append(trn_m["mean_f1"])
 
         scheduler.step()
-        head_lrs.append(optimizer.param_groups[1]["lr"])
-        backbone_lrs.append(optimizer.param_groups[0]["lr"])
+        head_lrs.append(optimizer.param_groups[0]["lr"])
 
         train_losses.append(trn_loss)
         val_losses.append(val_loss)
@@ -1007,7 +934,7 @@ def run_training(
     save_ap50_curves(train_ap50, val_ap50, output_dir)
     save_ap50_95_curves(train_ap50_95, val_ap50_95, output_dir)
     save_f1_curves(train_f1, val_f1, output_dir)
-    save_lr_curves(head_lrs, backbone_lrs, output_dir)
+    save_lr_curves(head_lrs, output_dir)
     save_train_val_gap_ap50(train_ap50, val_ap50, output_dir)
     save_metrics_overview(
         train_losses, val_losses,
@@ -1059,6 +986,8 @@ def run_training(
 
     summary = {
         "preset": cfg.name,
+        "frozen_backbone": "full_swin_features",
+        "trainable": "fpn_and_retinanet_head",
         "best_val_mAP_50": best_val_map,
         "test_mAP_50": test_m["mAP_50"],
         "test_mAP_50_95": test_m["mAP_50_95"],
@@ -1079,16 +1008,17 @@ def run_training(
 # ============================================================
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Swin-T + RetinaNet fine-tuning on YOLO data."
+        description="Swin-T frozen + FPN + RetinaNet (no backbone fine-tuning).",
     )
     p.add_argument("--data-dir", type=Path, default=None)
     p.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--batch-size", type=int, default=None)
     p.add_argument("--eval-batch-size", type=int, default=None)
-    p.add_argument("--head-lr", type=float, default=None)
-    p.add_argument("--backbone-lr", type=float, default=None)
-    p.add_argument("--freeze-stages", type=int, default=None)
+    p.add_argument(
+        "--head-lr", type=float, default=None,
+        help="LR for FPN + RetinaNet (Swin backbone frozen)",
+    )
     p.add_argument("--weight-decay", type=float, default=None)
     p.add_argument("--warmup-epochs", type=int, default=None)
     p.add_argument("--num-workers", type=int, default=None)
@@ -1112,10 +1042,6 @@ def _merge_cli(cfg: TrainConfig, args) -> TrainConfig:
         cfg.eval_batch_size = args.eval_batch_size
     if args.head_lr is not None:
         cfg.head_lr = args.head_lr
-    if args.backbone_lr is not None:
-        cfg.backbone_lr = args.backbone_lr
-    if args.freeze_stages is not None:
-        cfg.freeze_stages = args.freeze_stages
     if args.weight_decay is not None:
         cfg.weight_decay = args.weight_decay
     if args.warmup_epochs is not None:

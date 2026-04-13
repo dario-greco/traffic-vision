@@ -16,4 +16,6 @@ logs/
 
 # --- Hidden Metadata ---
 .fiftyone/
-.uv/
+.uv/dataset/
+data_final/
+dataset/
