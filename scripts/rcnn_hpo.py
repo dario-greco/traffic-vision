@@ -4,7 +4,7 @@ import json
 import itertools
 import pandas as pd
 from datetime import datetime
-# Assuming your previous training logic is in scripts/4_rcnn.py
+# Assuming your previous training logic is in scripts/rcnn_train.py
 from scripts.rcnn_train import train_model, get_args
 
 def run_hpo():
@@ -30,7 +30,7 @@ def run_hpo():
         trial_name = f"trial_{i}_lr{params['lr']}_step{params['step_size']}_wd{params['weight_decay']}"
         print(f"\n--- [Trial {i+1}/{len(trials)}]: {trial_name} ---")
         
-        # Setup arguments (inheriting defaults from your original script)
+        # Setup arguments 
         args = get_args()
         args.run_name = os.path.join("hpo_grid", trial_name)
         args.lr = params['lr']
@@ -39,15 +39,14 @@ def run_hpo():
         args.gamma = params['gamma']
         args.batch_size = 16 # Optimized batch size for L40S
         args.num_workers = 8
-        args.epochs = 15     # Shortened epochs for HPO efficiency
+        args.epochs = 15     
 
         # Run the training
-        # Note: Modify 4_rcnn.py to return the final mAP if not already doing so
         metrics = train_model(args)
         
         # Track results
         params['mAP_50_95'] = metrics.get('mAP_50_95', 0)
-        params['mAP_50'] = metrics.get('mAP_50', 0)
+        params['mAP_50'] = metrics.get('MAP_50', 0)
         params['final_loss'] = metrics.get('final_loss', 0)
         results_list.append(params)
         

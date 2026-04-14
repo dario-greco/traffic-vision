@@ -1,6 +1,9 @@
 """
 Train Faster R-CNN on the data_final YOLO-format dataset.
 Modularized for Hyperparameter Optimization (HPO).
+
+This module provides a complete training pipeline for Faster R-CNN object detection,
+including dataset loading, model training, evaluation, and early stopping.
 """
 
 import argparse
@@ -27,14 +30,34 @@ SUPPORTED_EXTS = (".jpg", ".jpeg", ".png")
 
 @dataclass
 class DatasetStats:
+    """Statistics tracked during dataset loading.
+    
+    Attributes:
+        total_images: Total number of images found
+        missing_label_files: Count of images without corresponding label files
+        dropped_bad_lines: Count of malformed lines in label files
+        dropped_bad_boxes: Count of invalid bounding boxes
+    """
     total_images: int = 0
     missing_label_files: int = 0
     dropped_bad_lines: int = 0
     dropped_bad_boxes: int = 0
 
 class DataFinalDetectionDataset(Dataset):
-    """Reads YOLO txt labels and returns tensors compatible with torchvision detection."""
+    """PyTorch Dataset that reads YOLO-format labels and returns tensors compatible with torchvision detection.
+    
+    Converts YOLO format (normalized center coordinates and dimensions) to
+    torchvision format (absolute corner coordinates).
+    
+    Args:
+        images_dir: Path to directory containing image files
+        labels_dir: Path to directory containing YOLO .txt label files
+        
+    Raises:
+        FileNotFoundError: If images_dir does not exist
+    """
     def __init__(self, images_dir: str, labels_dir: str):
+        """Initialize dataset with image and label directories."""
         self.images_dir = images_dir
         self.labels_dir = labels_dir
         self.stats = DatasetStats()
@@ -45,9 +68,23 @@ class DataFinalDetectionDataset(Dataset):
         self.stats.total_images = len(self.image_files)
 
     def __len__(self):
+        """Return total number of images in dataset."""
         return len(self.image_files)
 
     def __getitem__(self, index):
+        """Load and return image and target annotations.
+        
+        Args:
+            index: Index of the sample to load
+            
+        Returns:
+            Tuple of (image_tensor, target_dict) where target_dict contains:
+                - boxes: Tensor of shape (N, 4) with bounding boxes [x1, y1, x2, y2]
+                - labels: Tensor of shape (N,) with class IDs
+                - image_id: Tensor with image index
+                - area: Tensor with box areas
+                - iscrowd: Tensor indicating crowd annotations
+        """
         image_name = self.image_files[index]
         image_path = os.path.join(self.images_dir, image_name)
         with Image.open(image_path) as img:
@@ -84,15 +121,43 @@ class DataFinalDetectionDataset(Dataset):
         return image_tensor, target
 
 def get_model(num_classes: int) -> torch.nn.Module:
+    """Load a Faster R-CNN ResNet50 model and adjust for number of classes.
+    
+    Args:
+        num_classes: Number of object classes (including background)
+        
+    Returns:
+        Faster R-CNN model with custom classifier head
+    """
     model = fasterrcnn_resnet50_fpn(weights="DEFAULT")
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     return model
 
 def collate_fn(batch):
+    """Collate function for DataLoader that handles variable-sized batches.
+    
+    Args:
+        batch: List of (image, target) tuples
+        
+    Returns:
+        Tuple of (images_list, targets_list)
+    """
     return tuple(zip(*batch))
 
 def train_one_epoch(model, loader, optimizer, device, epoch):
+    """Train the model for one epoch.
+    
+    Args:
+        model: Faster R-CNN model to train
+        loader: DataLoader with training data
+        optimizer: Optimizer for gradient updates
+        device: torch device (cpu or cuda)
+        epoch: Current epoch number
+        
+    Returns:
+        Average loss for the epoch
+    """
     model.train()
     running_loss = 0.0
     for i, (images, targets) in enumerate(loader, start=1):
@@ -107,6 +172,15 @@ def train_one_epoch(model, loader, optimizer, device, epoch):
     return running_loss / max(1, len(loader))
 
 def _compute_ap_101(recalls, precisions):
+    """Compute Average Precision using 101-point interpolation.
+    
+    Args:
+        recalls: Tensor of recall values
+        precisions: Tensor of precision values
+        
+    Returns:
+        Average Precision score
+    """
     if recalls.numel() == 0: return 0.0
     for i in range(precisions.numel() - 2, -1, -1):
         precisions[i] = max(precisions[i], precisions[i + 1])
@@ -118,6 +192,22 @@ def _compute_ap_101(recalls, precisions):
     return ap / 101.0
 
 def evaluate_map(model, loader, device, num_classes: int):
+    """Evaluate model using Mean Average Precision metric.
+    
+    Computes mAP across IoU thresholds from 0.5 to 0.95 (COCO-style evaluation).
+    
+    Args:
+        model: Faster R-CNN model to evaluate
+        loader: DataLoader with validation data
+        device: torch device (cpu or cuda)
+        num_classes: Number of object classes
+        
+    Returns:
+        Dictionary with metrics:
+            - mAP_50_95: Mean AP across IoU thresholds 0.5-0.95
+            - MAP_50: AP at IoU threshold 0.5
+            - MAP_75: AP at IoU threshold 0.75
+    """
     model.eval()
     iou_thresholds = [round(0.5 + 0.05 * i, 2) for i in range(10)]
     class_ids = list(range(1, num_classes))
@@ -166,6 +256,11 @@ def evaluate_map(model, loader, device, num_classes: int):
     }
 
 def get_args():
+    """Parse and return command-line arguments.
+    
+    Returns:
+        Namespace object with training hyperparameters
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-dir", default=DEFAULT_DATASET_DIR)
     parser.add_argument("--run-name", default="baseline_rcnn")
@@ -181,6 +276,17 @@ def get_args():
     return parser.parse_known_args()[0]
 
 def train_model(args):
+    """Main training pipeline for Faster R-CNN model.
+    
+    Loads data, initializes model and optimizer, trains with early stopping,
+    and saves results and best checkpoint.
+    
+    Args:
+        args: Command-line arguments with training configuration
+        
+    Returns:
+        Dictionary with final training metrics and results
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run_dir = os.path.join(DEFAULT_OUTPUT_DIR, args.run_name)
     os.makedirs(run_dir, exist_ok=True)
