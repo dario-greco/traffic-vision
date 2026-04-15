@@ -2,7 +2,7 @@ import os
 import json
 import torch
 from torch.utils.data import DataLoader
-from scripts.rcnn_train import DataFinalDetectionDataset, get_model, collate_fn, evaluate_map
+from rcnn.rcnn_train import DataFinalDetectionDataset, get_model, collate_fn, evaluate_map
 
 def evaluate_test_set():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

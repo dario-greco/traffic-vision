@@ -1,6 +1,6 @@
 import torch
 import time
-from scripts.rcnn_train import get_model
+from rcnn.rcnn_train import get_model
 
 def run_benchmark():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

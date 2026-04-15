@@ -1,7 +1,7 @@
 import os
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
-from scripts.rcnn_train import DataFinalDetectionDataset, get_model, collate_fn, train_one_epoch
+from rcnn.rcnn_train import DataFinalDetectionDataset, get_model, collate_fn, train_one_epoch
 
 
 # We want to re-train the model on the full train + val set before the final test set eval. 
