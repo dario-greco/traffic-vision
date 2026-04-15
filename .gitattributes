@@ -1,0 +1,2 @@
+*.pt filter=lfs diff=lfs merge=lfs -text
+models_alternative/D-FINE/output/dfine_m_traffic/*.pth filter=lfs diff=lfs merge=lfs -text
