@@ -255,7 +255,13 @@ def infer_with_yolo(model_path: Path, test_images: list[Path], device: torch.dev
 
     t0 = time.perf_counter()
     for img_path in test_images:
-        result = model.predict(source=str(img_path), verbose=False, device=0 if device.type == "cuda" else "cpu")[0]
+        # Align YOLO confidence filtering with torchvision models (score threshold = 0.05).
+        result = model.predict(
+            source=str(img_path),
+            verbose=False,
+            device=0 if device.type == "cuda" else "cpu",
+            conf=0.05,
+        )[0]
         boxes = result.boxes.xyxy.detach().cpu() if result.boxes is not None else torch.zeros((0, 4))
         scores = result.boxes.conf.detach().cpu() if result.boxes is not None else torch.zeros((0,))
         labels = result.boxes.cls.detach().cpu().to(torch.int64) + 1 if result.boxes is not None else torch.zeros((0,), dtype=torch.int64)
