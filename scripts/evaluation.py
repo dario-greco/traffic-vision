@@ -376,16 +376,33 @@ def evaluate_swin(
 
 
 def _parse_dfine_stdout(text: str) -> tuple[float, float, float]:
-    lines = text.splitlines()
-    nums: list[float] = []
-    for line in lines:
-        if "Average Precision" in line and "IoU=" in line and "=" in line:
-            m = re.search(r"=\s*([0-9]*\.?[0-9]+)", line)
-            if m:
-                nums.append(float(m.group(1)))
-    if len(nums) >= 3:
-        return nums[0], nums[1], nums[2]
-    raise RuntimeError("Could not parse D-FINE AP/AP50/AP75 from evaluator output.")
+    """Parse COCO AP lines; value is after ``] =``, not ``IoU=0.50``."""
+    map_50_95: float | None = None
+    map_50: float | None = None
+    map_75: float | None = None
+
+    for line in text.splitlines():
+        if "Average Precision" not in line or "(AP)" not in line:
+            continue
+        if "area=" not in line or "all" not in line:
+            continue
+        tail = re.search(r"\]\s*=\s*([0-9.]+)\s*$", line.strip())
+        if not tail:
+            continue
+        val = float(tail.group(1))
+        if "IoU=0.50:0.95" in line:
+            map_50_95 = val
+        elif "IoU=0.50" in line and "0.50:0.95" not in line:
+            map_50 = val
+        elif "IoU=0.75" in line:
+            map_75 = val
+
+    if map_50_95 is not None and map_50 is not None and map_75 is not None:
+        return map_50_95, map_50, map_75
+    raise RuntimeError(
+        "Could not parse D-FINE AP/AP50/AP75 from evaluator output "
+        f"(got mAP5095={map_50_95}, mAP50={map_50}, mAP75={map_75})."
+    )
 
 
 def evaluate_dfine(
@@ -424,7 +441,8 @@ def evaluate_dfine(
         err = (proc.stderr or proc.stdout or "D-FINE evaluation failed").strip()
         raise RuntimeError(err)
 
-    map_50_95, map_50, map_75 = _parse_dfine_stdout(proc.stdout)
+    combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    map_50_95, map_50, map_75 = _parse_dfine_stdout(combined)
     ips = num_images / max(elapsed, 1e-8)
     return EvalMetrics(
         map_50_95=map_50_95,

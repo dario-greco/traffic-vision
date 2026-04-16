@@ -32,19 +32,39 @@ def count_test_images(test_images_dir: Path) -> int:
 
 
 def parse_dfine_stdout(text: str) -> tuple[float, float, float]:
-    # Expected COCO summary lines include:
-    # AP@[ IoU=0.50:0.95 ... ] = X
-    # AP@[ IoU=0.50 ... ]      = Y
-    # AP@[ IoU=0.75 ... ]      = Z
-    vals: list[float] = []
+    """Parse COCO bbox AP lines from D-FINE / pycocotools text output.
+
+    IMPORTANT: Do not use the first ``=`` on the line — that is ``IoU=0.50``.
+    The metric value is always after the closing ``]``, e.g.
+    ``... maxDets=100 ] = 0.307``.
+    """
+    map_50_95: float | None = None
+    map_50: float | None = None
+    map_75: float | None = None
+
     for line in text.splitlines():
-        if "Average Precision" in line and "IoU=" in line and "=" in line:
-            match = re.search(r"=\s*([0-9]*\.?[0-9]+)", line)
-            if match:
-                vals.append(float(match.group(1)))
-    if len(vals) >= 3:
-        return vals[0], vals[1], vals[2]
-    raise RuntimeError("Could not parse AP/AP50/AP75 from D-FINE output.")
+        if "Average Precision" not in line or "(AP)" not in line:
+            continue
+        # Only the overall row (skip area= small | medium | large)
+        if "area=" not in line or "all" not in line:
+            continue
+        tail = re.search(r"\]\s*=\s*([0-9.]+)\s*$", line.strip())
+        if not tail:
+            continue
+        val = float(tail.group(1))
+        if "IoU=0.50:0.95" in line:
+            map_50_95 = val
+        elif "IoU=0.50" in line and "0.50:0.95" not in line:
+            map_50 = val
+        elif "IoU=0.75" in line:
+            map_75 = val
+
+    if map_50_95 is not None and map_50 is not None and map_75 is not None:
+        return map_50_95, map_50, map_75
+    raise RuntimeError(
+        "Could not parse AP/AP50/AP75 from D-FINE output "
+        f"(got mAP5095={map_50_95}, mAP50={map_50}, mAP75={map_75})."
+    )
 
 
 def run_dfine_eval(dfine_root: Path, config: str, checkpoint: Path) -> tuple[str, float]:
@@ -75,7 +95,8 @@ def run_dfine_eval(dfine_root: Path, config: str, checkpoint: Path) -> tuple[str
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "D-FINE eval failed").strip()
         raise RuntimeError(err)
-    return proc.stdout, elapsed
+    # Some builds log metrics to stderr; merge for parsing.
+    return (proc.stdout or "") + "\n" + (proc.stderr or ""), elapsed
 
 
 def main() -> None:
