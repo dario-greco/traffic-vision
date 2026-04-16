@@ -23,7 +23,9 @@ augmentation_test.png
 # --- Model Weights ---
 # These are large binary files that belong on the cluster, not GitHub
 *.pt
-
+!models/rcnn/*.pt
+!models/swin_transformer/best_model.pt
+!models/yolo/yolo_untuned.pt
 # --- Hidden Metadata ---
 .fiftyone/
 .uv/
