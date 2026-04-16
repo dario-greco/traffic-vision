@@ -10,7 +10,7 @@ Rather than directly assessing driver behavior, this system provides a **foundat
 
 ---
 
-## 📊 Dataset
+## Dataset
 We use a **10,000-image subset (BDDK10k)** sampled from the [BDD100K dataset](https://bair.berkeley.edu/blog/2018/05/30/bdd/), which contains real-world dashcam imagery from urban environments including:
 - New York  
 - Berkeley  
