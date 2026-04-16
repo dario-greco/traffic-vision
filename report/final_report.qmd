@@ -1,0 +1,145 @@
+---
+title: "Traffic Sign and Signal Detection Using Computer Vision on Dashcam Data"
+author: "Dario Greco, Lovera Lokeswara, Sophia Feng, Sanika Poojary"
+date: last-modified
+format:
+  pdf:
+    fontsize: 11pt
+    geometry: margin=1in
+    number-sections: true
+    toc: true
+    toc-title: "Table of Contents"
+    toc-depth: 4
+    link-citations: true
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=2pt, topsep=2pt, parsep=0pt, partopsep=0pt}
+  - \usepackage{titling}
+  - \pretitle{\begin{center}\LARGE}
+  - \posttitle{\par\end{center}\vspace{0.5em}}
+  - \predate{\begin{center}\large}
+  - \postdate{\par\end{center}\newpage}
+execute:
+  echo: false
+  warning: false
+  message: false
+bibliography: references.bib
+---
+
+
+```{=latex}
+\newpage
+```
+# Abstract
+We build and evaluate an object detection pipeline for traffic sign and traffic light detection in urban dashcam footage to support safety analytics use cases at Uber. After initial planning on COCO, we pivot to the BDD100K dataset and curate a 10,000-image subset (BDDK10k) to improve domain relevance and reduce data leakage risk from pretrained model overlap. We train four model families (YOLO as the baseline, Swin Transformer, Faster R-CNN, and D-FINE), compare their performance on a held-out test set, and select the best trade-off model for deeper optimization.
+
+The comparative evaluation identifies Faster R-CNN (RCNN) as the strongest candidate under our test criteria. We then perform hyperparameter tuning on RCNN and report final fine-tuned performance with supporting plots. Our final recommendation is to use fine-tuned RCNN as the project baseline for future deployment-oriented work, while continuing to monitor speed-performance trade-offs for production feasibility.
+
+# Context
+Ride-sharing platforms like Uber rely on thousands of independent drivers operating in complex and dynamic urban environments. Ensuring that drivers are aware of and responsive to traffic control devices such as stop signs and traffic lights is critical for maintaining safety standards and reducing accident risk.
+
+
+Each such event exposes the company to insurance claims, legal liability, and regulatory scrutiny, while eroding trust with riders, drivers, and municipal partners. Leadership, insurers, and regulators are increasingly demanding that Uber demonstrate proactive, technology-driven approaches to safety. Yet today, Uber has no automated capability to determine whether drivers are correctly responding to traffic control devices during trips.
+
+
+Rather than directly evaluating driver behavior, this project focuses on building a reliable deep learning model that identifies when and where critical traffic control devices appear in a driver’s field of view. Specifically, we propose to build a computer vision system that detects traffic signs and traffic lights in urban dashcam footage. This capability would serve as a foundation for future safety tools, including automated trip auditing, real-time driver alerts, and post-incident analysis, helping Uber analyze driving context, identify high-risk driving patterns at scale, improve driver awareness, and demonstrate its commitment to safety to insurance partners and regulators.
+
+
+# Response to Feedback
+Following feedback on dataset scale and generalizability, we pivot from COCO to the Berkeley DeepDrive dataset (BDD100K). This change strengthens the study in four ways:
+
+
+- Scale and Diversity: BDD100K provides over 100,000 images, from which we randomly selected 10,000 samples. This represents a significant increase in training volume over our previous COCO-based approach.
+- Domain Specificity: Unlike the general-purpose imagery in COCO, BDD100K consists of actual dashcam footage. This "in-the-wild" perspective is far more relevant to real-world autonomous driving applications, specifically aligning with our goals for Uber’s operational environment.
+- Eliminating Data Leakage: We identified that several models we were evaluating were pre-trained on the COCO dataset. Continuing with COCO for our own tuning and testing would have introduced significant data leakage.
+- Novel Model Tuning: BDD100K provides a clean slate, allowing for truly novel performance evaluation and tuning specifically for complex traffic and environmental scenarios.
+
+
+We believe this shift ensures our findings are both statistically robust and practically applicable to the current challenges in intelligent transportation systems.
+
+
+Regarding the model comparison framework: INSERT HOW WE DECIDED TO COMPARE -- IE the inference speed, or other evaluation metrics 
+
+
+
+
+# Executive Summary
+- **Objective:** Detect traffic signs and traffic lights in urban dashcam data with high reliability.
+- **Data:** BDDK10k subset sampled from BDD100K.
+- **Models Trained:** YOLO (baseline), Swin Transformer, Faster R-CNN, D-FINE.
+- **Model Selection:** RCNN selected after test-set comparison.
+- **Final Step:** Hyperparameter tuning on RCNN and final evaluation.
+- **Outcome:** Fine-tuned RCNN provides the strongest overall performance in this study.
+
+# Methodology
+## Data Collection
+- Source dataset: BDD100K.
+- Working subset: BDDK10k (10,000 images).
+- Target classes: traffic signs and traffic lights.
+
+### Data Formatting
+- Converted annotations into each framework's required detection format.
+- Standardized image dimensions and label schema across all four models.
+- Applied train/validation/test split with no overlap across partitions.
+
+### Data Integration
+- Built model-specific data loaders and preprocessing pipelines.
+- Ensured consistent augmentation strategy across models for fair comparison.
+- Verified annotation integrity and class balance before training.
+
+### Output
+- Trained checkpoints for all four architectures.
+- Per-model test predictions and evaluation summaries.
+- Final tuned RCNN checkpoint and final performance plot.
+
+## Analysis
+- Primary metrics: mAP, precision, recall on the held-out test set.
+- Secondary consideration: inference efficiency (for deployment relevance).
+- Model ranking criterion: best overall accuracy-performance trade-off.
+
+## Model Architecture
+- **YOLO (baseline):** single-stage detector for strong speed baseline.
+- **Swin Transformer:** transformer-based detector for contextual representation.
+- **Faster R-CNN (RCNN):** two-stage detector optimized for localization quality.
+- **D-FINE:** modern detection architecture for competitive benchmark comparison.
+
+### Model Performance and Selection
+We trained all four models on BDDK10k and compared their test-set performance under the same evaluation protocol. RCNN was selected for further development because it achieved the best overall trade-off under our project criteria.
+
+```{=latex}
+% TODO: Replace with your final model comparison table/figure.
+% Suggested columns: Model, mAP, Precision, Recall, Inference Time, Notes.
+```
+
+### Cross-Validation 
+After model selection, we performed targeted hyperparameter tuning on RCNN (e.g., learning rate, optimizer settings, batch size, proposal settings, or augmentation strength depending on your implementation) and re-evaluated on the test set.
+
+```{=latex}
+% TODO: Insert tuned-vs-untuned RCNN comparison table.
+```
+
+
+# Results
+## Analysis Result
+The final fine-tuned RCNN model outperformed the untuned RCNN baseline and was retained as the final recommended model.
+
+```{=latex}
+% TODO: Insert the final RCNN performance plot and caption.
+```
+
+## Limitations and Future Directions
+- Current study is limited to BDDK10k and two target object categories.
+- Additional robustness analysis is needed for night scenes, heavy rain, and severe occlusion.
+- Future work should include latency benchmarking on deployment-like hardware and model compression experiments.
+- A natural extension is end-to-end event understanding (detect device + infer driver compliance behavior).
+
+## Conclusions
+This project delivers a complete model development pipeline for traffic control device detection using dashcam data. By moving to BDD100K and systematically evaluating four model families, we identify RCNN as the strongest architecture for this task. Hyperparameter tuning further improves RCNN performance, resulting in a final model that is suitable as the technical baseline for future safety analytics and deployment studies.
+
+
+# References
+
+
+# Appendix
+
+
