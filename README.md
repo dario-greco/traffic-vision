@@ -1,22 +1,16 @@
 # Traffic Vision: Traffic Sign & Light Detection
 
 ## Overview
-This project builds and evaluates a deep learning pipeline for detecting **traffic signs** and **traffic lights** in urban dashcam footage. The goal is to support safety analytics use cases in ride-sharing platforms by identifying critical traffic control devices in a driver’s field of view.
----
 
-## Dataset
-We use a **10,000-image subset (BDDK10k)** sampled from the [BDD100K dataset](https://bair.berkeley.edu/blog/2018/05/30/bdd/), which contains real-world dashcam imagery from urban environments including:
-- New York  
-- Berkeley  
-- San Francisco  
-- Greater Bay Area 
-
-The data is avaliable as in the `data_final/` folder.
+This project builds and evaluates a deep learning perception pipeline designed to reliably detect **traffic signs** and **traffic lights** in urban dashcam footage. Developed witha  ride-sharing safety analytics use case in mind, these perception layers are the first step toward enabling downstream safety applications such as automated trip auditing, post-incident analysis, and real-time driving context awareness.
 
 ---
-### Why BDD100K?
-- **Scale & Diversity:** Large, varied urban driving scenarios and weather enviroments
-- **Domain Relevance:** Real dashcam footage 
+## Dataset: BDD10k
+To ensure the models generalize to real-world driving conditions, we utilized a **10,000-image subset (BDDK10k)** randomly sampled from the [BDD100K Dataset](https://bair.berkeley.edu/blog/2018/05/30/bdd/). 
+
+* **Domain Relevance:** Imagery is captured entirely from a vehicle’s dashboard perspective across New York, Berkeley, San Francisco, and the Greater Bay Area.
+* **Native Diversity:** The dataset features an approximately even split between daytime and nighttime driving, with significant meteorological variability (rain, snow, fog, overcast). This native diversity largely bypasses the need for synthetic data augmentation.
+* **Data Split:** 7,000 Training | 1,000 Validation | 2,000 Held-out Test.
 ---
 
 ## Objective
@@ -26,17 +20,18 @@ Detect traffic control devices with strong performance across:
 ---
 
 ## Models Evaluated
-We train and compare four object detection architectures:
+We trained and evaluated four distinct object detection architectures to find the optimal balance between detection accuracy and inference efficiency:
 
-| Model | Type | Key Strength |
-|------|------|-------------|
-| **YOLO** | Single-stage | Fast inference (baseline) |
-| **Swin Transformer** | Transformer-based | Strong contextual understanding |
-| **Faster R-CNN (RCNN)** | Two-stage | High localization accuracy |
-| **D-FINE** | Modern detector | Competitive performance benchmark |
+| Model | Architecture Type | Key Characteristic |
+| :--- | :--- | :--- |
+| **YOLOv8n** | Single-stage CNN | Extremely fast inference; acts as our baseline. |
+| **Swin Transformer** | Transformer-based | Hierarchical feature extraction with shifted-window attention. |
+| **Faster R-CNN** | Two-stage Detector | High-quality region proposals for strong localization. |
+| **D-FINE** | DETR-based (Modern) | Uses Fine-grained Distribution Refinement (FDR) without NMS. |
+
+Models were evaluated on a held-out test set using Mean Average Precision (mAP) across varying IoU thresholds and Inference Speed (images per second)
 
 ---
-
 
 ## Project Structure
 ```
@@ -80,7 +75,7 @@ git clone https://github.com/dario-greco/traffic-vision.git
 cd traffic-vision
 ```
 ### Install Dependencies 
-Using `uv` (as specified in `pyproject.toml`):
+This project uses uv for fast dependency management (as specified in `pyproject.toml`):
 
 ```bash
 uv sync
@@ -89,13 +84,12 @@ uv pip install -r models/D-FINE/requirements.txt
 
 ### Evaluation
 
-To compare all the trained models run:
+To run the automated comparison script across all trained models and generate the final metrics in the results/ folder:
 
 ```bash
 uv run python scripts/evaluation.py
 ```
 
-the output will be stored in the `results/` folder.
 
 ## References
-- [BDD100K Dataset](https://bdd-data.berkeley.edu/)
+- [BDD100K Dataset](https://bair.berkeley.edu/blog/2018/05/30/bdd/)
