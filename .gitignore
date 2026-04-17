@@ -25,6 +25,7 @@ augmentation_test.png
 *.pt
 !models/rcnn/*.pt
 !models/swin_transformer/best_model.pt
+!models/rcnn/hpo/FINAL_PRODUCTION_MODEL.pt
 !models/yolo/yolo_untuned.pt
 # --- Hidden Metadata ---
 .fiftyone/
