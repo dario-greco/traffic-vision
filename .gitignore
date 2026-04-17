@@ -13,6 +13,7 @@ logs/
 data_final/
 *.jpg
 *.png
+!results/*.png
 configs/
 legacy_archive/
 yolo/labels_backup/
