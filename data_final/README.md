@@ -6,7 +6,7 @@
 This directory contains the 10,000-image working subset sampled from the official [BDD100K](https://bair.berkeley.edu/blog/2018/05/30/bdd/) dataset. It is specifically curated for detecting `traffic light` and `stop sign` classes to support the project's urban safety analytics objective.
 
 ## Data Splits
-The 10,000 images are partitioned with a strict no-overlap policy to prevent data leakage:
+The 10,000 images are partitioned in the `images` folder:
 * **Training (`train/`):** 7,000 images 
 * **Validation (`val/`):** 1,000 images 
 * **Testing (`test/`):** 2,000 images
