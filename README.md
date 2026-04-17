@@ -84,12 +84,17 @@ uv pip install -r models/D-FINE/requirements.txt
 
 ### Evaluation
 
-To run the automated comparison script across all trained models and generate the final metrics in the results/ folder:
+To run the automated comparison script across all trained models and generate the final outputs in the `results/` folder:
 
 ```bash
 uv run python scripts/evaluation.py
 ```
 
+To run the evaluation of the tuned RCNN model on the test set and generate the resulting outputs in the `results/` folder:
+
+```bash
+uv run python scripts/evaluation_rcnn.py
+```
 
 ## References
 - [BDD100K Dataset](https://bair.berkeley.edu/blog/2018/05/30/bdd/)
