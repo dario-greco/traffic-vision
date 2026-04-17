@@ -5,7 +5,7 @@ import itertools
 import pandas as pd
 from datetime import datetime
 # Assuming your previous training logic is in scripts/rcnn_train.py
-from models.rcnn.rcnn_pipeline import train_model, get_args
+from models.rcnn.hpo.rcnn_pipeline import train_model, get_args
 
 def run_hpo():
     # 1. Define the Search Grid
@@ -64,7 +64,7 @@ def run_hpo():
 
     # 2. Save HPO Summary
     df = pd.DataFrame(results_list)
-    df.to_csv("runs/detect/rcnn_runs/hpo_grid/hpo_summary.csv", index=False)
+    df.to_csv("results/hpo_summary.csv", index=False)
     print("\nGrid Search Complete. Results saved to hpo_summary.csv")
 
 if __name__ == "__main__":

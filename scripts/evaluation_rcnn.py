@@ -8,7 +8,7 @@ This script computes the same metrics as ``scripts/evaluation.py``:
 - precision/recall/F1 at IoU 0.50
 - inference speed (images/sec, ms/image)
 
-It saves RCNN-only plots and a JSON summary under ``plots/``.
+It saves RCNN-only plots and a JSON summary under ``results/``.
 """
 
 from __future__ import annotations
@@ -126,7 +126,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--test-images", type=Path, default=root / "data_final" / "images" / "test")
     p.add_argument("--test-labels", type=Path, default=root / "data_final" / "labels" / "test")
-    p.add_argument("--plots-dir", type=Path, default=root / "plots")
+    p.add_argument("--plots-dir", type=Path, default=root / "results")
     return p.parse_args()
 
 

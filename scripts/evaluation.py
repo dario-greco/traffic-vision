@@ -10,7 +10,7 @@ The script:
    - mAP@0.75
    - precision / recall / F1 at IoU 0.50
 4) Measures inference speed (images/sec and ms/image).
-5) Saves plots and a JSON summary under ``plots/``.
+5) Saves plots and a JSON summary under ``results/``.
 
 Notes:
 - Paths are resolved relative to repository root to stay portable across machines.
@@ -570,7 +570,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--device", default=None, help="cuda/cpu (default: auto)")
     p.add_argument("--test-images", type=Path, default=root / "data_final" / "images" / "test")
     p.add_argument("--test-labels", type=Path, default=root / "data_final" / "labels" / "test")
-    p.add_argument("--plots-dir", type=Path, default=root / "plots")
+    p.add_argument("--plots-dir", type=Path, default=root / "results")
     p.add_argument("--dfine-config", default=None, help="Optional D-FINE config path relative to D-FINE root.")
     return p.parse_args()
 
