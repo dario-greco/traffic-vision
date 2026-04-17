@@ -63,6 +63,9 @@ Models were evaluated on a held-out test set using Mean Average Precision (mAP) 
 ├── scripts/                        # Model performance comparison scripts
 ├── logs/                           # Training logs
 ├── results/                        # Output results and visualizations
+├── report/                         # Quarto report sources and bibliography
+│   ├── executive_report.qmd        # Executive report (Quarto)
+│   └── references.bib              # Bibliography for the report
 └── runs/                           # YOLOv8 run artifacts
 ```
 
