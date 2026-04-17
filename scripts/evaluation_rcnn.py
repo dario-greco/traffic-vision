@@ -121,7 +121,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--checkpoint",
         type=Path,
-        default=root / "models" / "rcnn" / "FINAL_PRODUCTION_MODEL.pt",
+        default=root / "models" / "rcnn" / "hpo" / "FINAL_PRODUCTION_MODEL.pt",
         help="Path to fine-tuned RCNN checkpoint.",
     )
     p.add_argument("--test-images", type=Path, default=root / "data_final" / "images" / "test")
