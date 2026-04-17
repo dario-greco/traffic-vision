@@ -5,7 +5,7 @@ import itertools
 import pandas as pd
 from datetime import datetime
 # Assuming your previous training logic is in scripts/rcnn_train.py
-from scripts.rcnn_train import train_model, get_args
+from models.rcnn.rcnn_pipeline import train_model, get_args
 
 def run_hpo():
     # 1. Define the Search Grid

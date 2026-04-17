@@ -1,7 +1,8 @@
 import os
+import shutil
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
-from rcnn.rcnn_train import DataFinalDetectionDataset, get_model, collate_fn, train_one_epoch
+from models.rcnn.hpo.rcnn_pipeline import DataFinalDetectionDataset, get_model, collate_fn, train_one_epoch
 
 
 # We want to re-train the model on the full train + val set before the final test set eval. 
@@ -54,5 +55,11 @@ def train_production_model():
     torch.save(model.state_dict(), final_model_path)
     print(f"\nTraining Complete! Production model saved to: {final_model_path}")
 
+     # Copy final model to models/rcnn/hpo/ and rename
+    hpo_dir = os.path.dirname(__file__)
+    hpo_model_dst = os.path.join(hpo_dir, "FINAL_PRODUCTION_MODEL.pt")
+    shutil.copy(final_model_path, hpo_model_dst)
+    print(f"Model also saved to: {hpo_model_dst}")
+    
 if __name__ == "__main__":
     train_production_model()
