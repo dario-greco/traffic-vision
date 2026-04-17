@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """Train with a **frozen** Swin-T trunk and only FPN + RetinaNet weights updated.
 
-Dataset layout matches ``2.1_swin_transformer.py`` (YOLO boxes under ``dataset/``).
 Swin ``features`` stay fixed at ImageNet pretraining; ``head_lr`` applies to the
 FPN and detection head only.
 
 Same runtime optimisations as the fine-tuning script (AMP, accumulation, periodic
 train mAP, etc.). Outputs default to ``swin_runs_without_ft/``.
-
-CLI examples::
-
-    python scripts/2.1_swin_transformer_without_ft.py
-    python scripts/2.1_swin_transformer_without_ft.py --epochs 25 --head-lr 3e-4
 """
 
 from __future__ import annotations
@@ -45,7 +39,9 @@ from torchvision.ops import FeaturePyramidNetwork, box_iou
 from torchvision.ops.feature_pyramid_network import LastLevelMaxPool
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_DATA_DIR = BASE_DIR / "dataset"
+SWIN_TRANSFORMER_DIR = Path(__file__).resolve().parent
+DEFAULT_DATA_DIR = BASE_DIR / "data_final"
+DEFAULT_BEST_MODEL_PT = SWIN_TRANSFORMER_DIR / "best_model.pt"
 DEFAULT_OUTPUT_DIR = BASE_DIR / "swin_runs_without_ft"
 
 CLASS_NAMES = {0: "stop sign", 1: "traffic light"}
@@ -932,8 +928,11 @@ def run_training(
 
         if val_m["mAP_50"] > best_val_map:
             best_val_map = val_m["mAP_50"]
-            torch.save(model.state_dict(), output_dir / "best_model.pt")
-            print(f"    ✓ best_model.pt (val mAP@0.5={best_val_map:.4f})")
+            torch.save(model.state_dict(), DEFAULT_BEST_MODEL_PT)
+            print(
+                f"    ✓ {DEFAULT_BEST_MODEL_PT} "
+                f"(val mAP@0.5={best_val_map:.4f})"
+            )
 
     torch.save(model.state_dict(), output_dir / "final_model.pt")
     print("\nTraining complete.  Models saved to:", output_dir)
@@ -964,7 +963,7 @@ def run_training(
 
     print("\n=== Test evaluation (best checkpoint) ===")
     state = torch.load(
-        output_dir / "best_model.pt", map_location=DEVICE, weights_only=True,
+        DEFAULT_BEST_MODEL_PT, map_location=DEVICE, weights_only=True,
     )
     model.load_state_dict(state)
     model.to(DEVICE)
