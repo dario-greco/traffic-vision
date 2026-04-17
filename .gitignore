@@ -4,30 +4,25 @@ __pycache__/
 .python-version
 .DS_Store
 
-# --- Project Data (DO NOT UPLOAD) ---
-# We want teammates to run the scripts to generate these locally
-yolo_dataset/
+# --- Project Data ---
 runs/
 logs/
+
 # Ignore all data and images
 data_final/
 *.jpg
 *.png
 !results/*.png
 configs/
-legacy_archive/
-yolo/labels_backup/
 archive/
 
-# Ignore test outputs
-augmentation_test.png
 # --- Model Weights ---
-# These are large binary files that belong on the cluster, not GitHub
 *.pt
 !models/rcnn/*.pt
 !models/swin_transformer/best_model.pt
 !models/rcnn/hpo/FINAL_PRODUCTION_MODEL.pt
 !models/yolo/yolo_untuned.pt
+
 # --- Hidden Metadata ---
 .fiftyone/
 .uv/
