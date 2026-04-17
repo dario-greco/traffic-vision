@@ -16,7 +16,7 @@ data_final/
 configs/
 legacy_archive/
 yolo/labels_backup/
-
+archive/
 
 # Ignore test outputs
 augmentation_test.png
